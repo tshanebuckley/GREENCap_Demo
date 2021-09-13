@@ -1,0 +1,5 @@
+api_url: 127.0.0.1
+api_port: 4747
+app_url: 127.0.0.1
+app_port: 3838
+frontend: "app.py"
