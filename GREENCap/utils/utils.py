@@ -52,35 +52,57 @@ def split_form_and_str(full_str = None):
 
 # method to create all individual api calls for a selection, follows an "opt-in" approach instead of PyCaps's "opt-out" approach on selection
 # TODO: Update this method for selecting arguments to extend by and number of chunks
-# can drop extended_by from the selection_criteria and add back in to extended_call_list_of_dicts (add to each dict)
-# apply chunking to extended_call_list_of_tuples
-def extend_api_calls(selection_criteria=None, extended_by=['records'], num_chunks=5]):
+# apply chunking to extended_call_list_of_dicts -> can probably use deepmerge for this as well
+def extend_api_calls(selection_criteria=None, extended_by=['records'], num_chunks=5): # , 'fields', 'forms'
+    # drop any empty selection criteria
+    selection_criteria = {key: selection_criteria[key] for key in selection_criteria.keys() if selection_criteria[key] != []}
+    #print(selection_criteria)
+    # get the set of criteria to not extend by
+    not_extended_by = set(selection_criteria.keys()) - set(extended_by)
+    #print(not_extended_by)
+    # if not_extended_by is empty, then set it to None
+    if len(not_extended_by) == 0:
+        not_extended_by = None
+    #print(not_extended_by)
+    # get the criteria not being extended by while removing them from the selection_criteria
+    not_extended_by = {key: selection_criteria.pop(key) for key in not_extended_by}
+    #print(not_extended_by)
     # converts the dict into lists with tags identifying the criteria: from criteria: value to <criteria>_value
     criteria_list = [[key + '_' + item for item in selection_criteria[key]] for key in selection_criteria.keys()]
-    # drop any empty lists
-    while [] in criteria_list: criteria_list.remove([])
+    #print(criteria_list)
     # gets all permutations to get all individual calls
     extended_call_list_of_tuples = list(itertools.product(*criteria_list))
+    print("----------------------------------------------------")
+    #print(extended_call_list_of_tuples)
     # method to convert the resultant list of tubles into a list of dicts
-    def crit_tuples_to_dicts(list_of_tuples):
+    def crit_tuple_to_dict(this_tuple, extend_to_dicts=None):
         # get the list of key
-        keys = [x.split('_')[0] for x in list_of_tuples]
-        # initialize the lists of dicts
-        dict_list = {this_key: [] for this_key in keys}
+        keys = {x.split('_')[0] for x in this_tuple}
+        # initialize the dicts
+        this_dict = {this_key: [] for this_key in keys}
         # fill the list of dicts
-        for item in list_of_tuples:
+        for item in this_tuple:
             # get the key
             key = item.split('_')[0]
             # get the value
             value = item.replace(key + '_', '', 1)
             # add the value
-            dict_list[key].append(value)
+            this_dict[key].append(value)
+        #print(this_dict)
+        if extend_to_dicts != None:
+            this_dict.update(not_extended_by)
         # return the list of dicts
-        return dict_list
+        #print(dict_list)
+        return this_dict
     # convert the list of lists back into a list of dicts
-    extended_call_list_of_dicts = [crit_tuples_to_dicts(list_of_tuples=x) for x in extended_call_list_of_tuples]
+    extended_call_list_of_dicts = [crit_tuple_to_dict(this_tuple=x, extend_to_dicts=not_extended_by) for x in extended_call_list_of_tuples]
+    #print(extended_call_list_of_dicts)
+    # re-add the criteria that we do not extend out calls by
+    #extended_call_list_of_dicts = [x = x.update(not_extended_by) for x in extended_call_list_of_dicts]
+    print(extended_call_list_of_dicts)
+    # if the call is being
     # return the list of api requests
-    return extended_call_list_of_dicts
+    return None #extended_call_list_of_dicts
 
 @sync_to_async
 def async_pycap(project, function_name, call_args):
@@ -90,7 +112,7 @@ def async_pycap(project, function_name, call_args):
 
 # async method to run a list of api calls
 async def run_pycap_requests(project, function_name, api_calls):
-    print('Trying async {num_of_calls} call...'.format(num_of_calls=str(len(api_calls))))
+    print('Trying async {num_of_calls} call(s) ...'.format(num_of_calls=str(len(api_calls))))
     # get thge list of asynchronous api calls
     tasks = []
     for api_call in api_calls:
@@ -102,7 +124,7 @@ async def run_pycap_requests(project, function_name, api_calls):
     return response
 
 # covenience function for prunning a parsed selection
-def run_selection(project = None, records: Optional[str] = "", arms: Optional[str] = "", events: Optional[str] = "", fields: Optional[str] = "", syncronous=False, chunked=False):
+def run_selection(project = None, records: Optional[str] = "", arms: Optional[str] = "", events: Optional[str] = "", fields: Optional[str] = "", syncronous=False, num_chunks=5):
     chosen_fields = [] # project.def_field
     chosen_forms = []
     chosen_records = []
@@ -148,14 +170,14 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
         # get the kwargs
         selection_criteria = {"records": chosen_records, "fields": chosen_fields, "forms": chosen_forms}
         # get all of the possible single item api calls: not implemented yet
-        api_calls = extend_api_calls(selection_criteria=selection_criteria)
-        print(api_calls)
-        print(project.export_records(**api_calls[0]))
+        api_calls = extend_api_calls(selection_criteria=selection_criteria, num_chunks=num_chunks)
+        #print(api_calls)
+        #print(project.export_records(**api_calls[0]))
         # run the api calls asynchronously
         results = asyncio.run(run_pycap_requests(project=project, function_name='export_records', api_calls=api_calls))
         #results = asyncio.run(async_export(project=project, api_calls=api_calls))
-        print(results)
-        # format the results as if they were a single call
+        #print(results)
+        # format the results as if they were a single call -> NOTE: Should be able to use mergedeep package here
 
     # if running a single call
     elif syncronous == True:
@@ -168,6 +190,7 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
         json.dumps(df)
         df = json.loads(df)
         return df
+    # TODO: consider non-longitudinal studies? Skip arms and events if so? Query if longitudinal using PyCap metadata?
     # if arms are given for the selection
     if arms != "":
         # TODO: check the regex instead
@@ -188,7 +211,7 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
     for col in df.columns:
         collapsed_cols.append(col[0] + '#' + col[1]) # '#' used to separate field and event
     df.columns = collapsed_cols
-    # here, if the dataframe is empty and the only chosen field is the def_field
+    # here, if the dataframe is empty and the only chosen field is the def_field (allows returning only records names)
     if df.empty and chosen_fields == [project.def_field]:
         # then set the df to a set of the records
         df = tuple(df.index)
@@ -201,7 +224,7 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
     df = json.loads(df)
     return df
 
-# convenience function for getting the greencap config file data
+# convenience function for getting the greencap config file data, TODO: configure this to integrate with a system
 def get_greencap_config():
     file_path = '../config/greencap_config.yaml'
     # open the file
@@ -211,7 +234,7 @@ def get_greencap_config():
     # return the dict
     return(d)
 
-# convenience function for getting the config file data
+# convenience function for getting the config file data, TODO: configure this to integrate with a system
 def get_project_config(project = None):
     file_path = '../config/projects/{proj}.json'.format(proj=project)
     # open the file

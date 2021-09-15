@@ -1,5 +1,8 @@
 api_url: 127.0.0.1
 api_port: 4747
-app_url: 127.0.0.1
-app_port: 3838
-frontend: "app.py"
+server_url: 127.0.0.1
+server_port: 3838
+gui_url: 127.0.0.1
+gui_port: 1212
+gui: "app.py"
+server: "server.R"
