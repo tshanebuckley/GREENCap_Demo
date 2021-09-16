@@ -1,0 +1,17 @@
+name: greencap
+channels:
+  - conda-forge
+dependencies:
+  - python=3.9   # or 2.7
+  - pandas
+  - r-base=4.1
+  - r-tidyverse
+  - pip:
+    - pycap
+    - asgiref
+    - fastapi
+    - nuvicorn
+    - yaml
+    - configparser
+    - mergedeep
+    

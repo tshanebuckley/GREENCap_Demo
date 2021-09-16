@@ -1,5 +1,6 @@
 from typing import Optional
 from asgiref.sync import async_to_sync, sync_to_async
+from mergedeep import merge, Strategy
 import configparser
 import fnmatch
 import json
@@ -97,10 +98,24 @@ def extend_api_calls(selection_criteria=None, extended_by=['records'], num_chunk
     # convert the list of lists back into a list of dicts
     extended_call_list_of_dicts = [crit_tuple_to_dict(this_tuple=x, extend_to_dicts=not_extended_by) for x in extended_call_list_of_tuples]
     #print(extended_call_list_of_dicts)
-    # re-add the criteria that we do not extend out calls by
-    #extended_call_list_of_dicts = [x = x.update(not_extended_by) for x in extended_call_list_of_dicts]
-    print(extended_call_list_of_dicts)
-    # if the call is being
+    # method that generates chunks
+    def chunks(lst, n):
+        """Yield successive n-sized chunks from lst."""
+        for i in range(0, len(lst), n):
+            yield lst[i:i + n]
+    # method to re-combine the max-width jobs split into n chunks
+    def condense_to_chunks(all_api_calls, num_chunks):
+        # chunk the api_calls list
+        chunked_calls_unmerged = chunks(lst=all_api_calls, n=num_chunks)
+        # merge the chunks idividual calls
+        chunked_calls_merged = merged = merge({}, *chunked_calls_unmerged, strategy=Strategy.TYPESAFE_ADDITIVE)
+        # return the api calls
+        return chunked_calls_merged
+    #print(extended_call_list_of_dicts)
+    # chunk the calls
+    final_call_list = condense_to_chunks(all_api_calls=extended_call_list_of_dicts, num_chunks=num_chunks)
+    print("HERE")
+    print(final_call_list)
     # return the list of api requests
     return None #extended_call_list_of_dicts
 
