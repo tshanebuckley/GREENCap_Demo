@@ -1,6 +1,7 @@
 from typing import Optional
 from asgiref.sync import async_to_sync, sync_to_async
 from mergedeep import merge, Strategy
+from functools import reduce
 import configparser
 import fnmatch
 import json
@@ -14,6 +15,7 @@ import asyncio
 import redcap
 import contextlib
 import itertools
+import requests
 
 # covenience function for parsing selections (arm, event, field)
 def parse_field_single_selection(selection_item = None, selection_str = None):
@@ -51,30 +53,45 @@ def split_form_and_str(full_str = None):
     # return these as a dict
     return {"form_name": form_name, "select_str": select_str}
 
+# method that generates chunks
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    #for i in range(0, len(lst), n): -> by a chunk-size n
+    #    yield lst[i:i + n]
+    for i in range(0, n): # number of chunks
+        yield lst[i::n]
+
+# method that runs the deep merge over a chunk
+def merge_chunk(chunk_as_list_of_dicts):
+    # initialize the return dict as an empty dict
+    chunk_as_dict = dict()
+    # merge all of the dicts in the chunk
+    merge(chunk_as_dict, *chunk_as_list_of_dicts, strategy=Strategy.TYPESAFE_ADDITIVE)
+    # drop duplicated items in any lists
+    for key in chunk_as_dict.keys():
+        # if the value is a list
+        if isinstance(chunk_as_dict[key], list):
+            # drop duplicate items
+            chunk_as_dict[key] = list(set(chunk_as_dict[key]))
+    # return the combined dict
+    return chunk_as_dict
+
+# TODO: parallelize this
 # method to create all individual api calls for a selection, follows an "opt-in" approach instead of PyCaps's "opt-out" approach on selection
-# TODO: Update this method for selecting arguments to extend by and number of chunks
-# apply chunking to extended_call_list_of_dicts -> can probably use deepmerge for this as well
-def extend_api_calls(selection_criteria=None, extended_by=['records'], num_chunks=5): # , 'fields', 'forms'
+def extend_api_calls(selection_criteria=None, extended_by=['records'], num_chunks=10): # , 'fields', 'forms'
     # drop any empty selection criteria
     selection_criteria = {key: selection_criteria[key] for key in selection_criteria.keys() if selection_criteria[key] != []}
-    #print(selection_criteria)
     # get the set of criteria to not extend by
     not_extended_by = set(selection_criteria.keys()) - set(extended_by)
-    #print(not_extended_by)
     # if not_extended_by is empty, then set it to None
     if len(not_extended_by) == 0:
         not_extended_by = None
-    #print(not_extended_by)
     # get the criteria not being extended by while removing them from the selection_criteria
     not_extended_by = {key: selection_criteria.pop(key) for key in not_extended_by}
-    #print(not_extended_by)
     # converts the dict into lists with tags identifying the criteria: from criteria: value to <criteria>_value
     criteria_list = [[key + '_' + item for item in selection_criteria[key]] for key in selection_criteria.keys()]
-    #print(criteria_list)
     # gets all permutations to get all individual calls
     extended_call_list_of_tuples = list(itertools.product(*criteria_list))
-    print("----------------------------------------------------")
-    #print(extended_call_list_of_tuples)
     # method to convert the resultant list of tubles into a list of dicts
     def crit_tuple_to_dict(this_tuple, extend_to_dicts=None):
         # get the list of key
@@ -89,40 +106,59 @@ def extend_api_calls(selection_criteria=None, extended_by=['records'], num_chunk
             value = item.replace(key + '_', '', 1)
             # add the value
             this_dict[key].append(value)
-        #print(this_dict)
+        # if there were fields the calls were not extended by
         if extend_to_dicts != None:
             this_dict.update(not_extended_by)
         # return the list of dicts
-        #print(dict_list)
         return this_dict
     # convert the list of lists back into a list of dicts
     extended_call_list_of_dicts = [crit_tuple_to_dict(this_tuple=x, extend_to_dicts=not_extended_by) for x in extended_call_list_of_tuples]
     #print(extended_call_list_of_dicts)
-    # method that generates chunks
-    def chunks(lst, n):
-        """Yield successive n-sized chunks from lst."""
-        for i in range(0, len(lst), n):
-            yield lst[i:i + n]
     # method to re-combine the max-width jobs split into n chunks
     def condense_to_chunks(all_api_calls, num_chunks):
         # chunk the api_calls list
-        chunked_calls_unmerged = chunks(lst=all_api_calls, n=num_chunks)
+        chunked_calls_unmerged = list(chunks(lst=all_api_calls, n=num_chunks))
         # merge the chunks idividual calls
-        chunked_calls_merged = merged = merge({}, *chunked_calls_unmerged, strategy=Strategy.TYPESAFE_ADDITIVE)
+        chunked_calls_merged = [merge_chunk(x) for x in chunked_calls_unmerged]
         # return the api calls
         return chunked_calls_merged
-    #print(extended_call_list_of_dicts)
     # chunk the calls
     final_call_list = condense_to_chunks(all_api_calls=extended_call_list_of_dicts, num_chunks=num_chunks)
-    print("HERE")
-    print(final_call_list)
+    #print(final_call_list)
     # return the list of api requests
-    return None #extended_call_list_of_dicts
+    return final_call_list
+
+# method to retun if a project has events
+def has_events(project):
+    # if the project has no events, return False
+    if len(project.events) == 0:
+        return False
+    # otherwise, return True
+    else:
+        return True
+
+# method to retun if a project has arms
+def has_arms(project):
+    # if the project has no arms, return False
+    if len(project.arm_nums) == 0:
+        return False
+    # otherwise, return True
+    else:
+        return True
+
+# method to return if a project is longitudinal or not
+def is_longitudinal(project):
+    # if the project has events or arms, return True
+    if has_events(project) or has_arms(project):
+        return True
+    # otherwise, return false
+    else:
+        return False
 
 @sync_to_async
 def async_pycap(project, function_name, call_args):
     func_response = eval('project.' + function_name + '(**{call_args})'.format(call_args=call_args))
-    print(func_response)
+    #print(func_response)
     return func_response
 
 # async method to run a list of api calls
@@ -131,15 +167,83 @@ async def run_pycap_requests(project, function_name, api_calls):
     # get thge list of asynchronous api calls
     tasks = []
     for api_call in api_calls:
-        print(api_call)
+        #print(api_call)
         task = asyncio.ensure_future(async_pycap(project=project, function_name=function_name, call_args=api_call))
         tasks.append(task)
     # run and return the list of calls
     response = await asyncio.gather(*tasks)
     return response
 
+# method to drop arms from a returned api call (dict)
+def drop_arms(arms_list, df):
+    # drop arms not in the selection
+    df = [x for x in df if x["redcap_event_name"].split("_arm_")[-1] in arms_list]
+    # return the updated dict
+    return df
+
+# method to drop events from a returned api call (dict)
+def drop_events(events_list, df):
+    # drop events not in the selection
+    df = [x for x in df if x["redcap_event_name"].split("_arm_")[0] in events_list]
+    # return the updated dict
+    return df
+
+# method to trim unwanted longitudinal data (arms and events given as comma-separated strings)
+def trim_longitudial_project(df, arms="", events="", n_cpus=1):
+    # TODO: parallelize this step
+    # initialize the input_is_dict boolean to False
+    input_is_dict = False
+    # if the df is a single dict
+    if isinstance(df, dict):
+        # then wrap it in a list
+        df = [df]
+        # set the input_is_dict boolean to True
+        input_is_dict = True
+    # if arms are given for the selection
+    if arms != "":
+        # TODO: check the regex instead
+        arms_list = arms.split(",")
+        # drop arms not in the arms selection
+        df = [drop_arms(arms_list=arms_list, df=x) for x in df]
+    # if events are given for the selection
+    if events != "":
+        # TODO: check the regex instead
+        events_list = events.split(",")
+        # drop events not in the events selection
+        df = [drop_events(events_list=events_list, df=x) for x in df]
+    # if the list is of length 1 and the input was a dict, return to just a dict
+    if len(df) == 1 and isinstance(df, list) and input_is_dict:
+        df = df[0]
+    # return the trimmed project data (dict)
+    return df
+
+# method to save a pipeline as a url
+#def save_pipeline_url(name, url):
+
+# method to store md5 checksum of the logging data, will be used for caching queries
+#def update_log_md5(project, seconds_earlier):
+'''
+import requests
+data = {
+    'token': project.token,
+    'content': 'log',
+    'logtype': 'record',
+    'user': '', # remove ?
+    'record': '', # remove ?
+    'beginTime': '2017-09-19 14:22', # get the current time and go back in seconds
+    'endTime': '', # endTime will be current time, remove?
+    'format': 'json',
+    'returnFormat': 'json'
+}
+r = requests.post(project.url, data=data).json() # create md5 from this and store somewhere
+#print('HTTP Status: ' + str(r.status_code))
+#print(r.json())
+'''
+
+# TODO: implement caching, custom to rerun if internal REDCap logging updated
+# TODO: add defensive coding for whitespace handling, type checking, and field/form/record existence
 # covenience function for prunning a parsed selection
-def run_selection(project = None, records: Optional[str] = "", arms: Optional[str] = "", events: Optional[str] = "", fields: Optional[str] = "", syncronous=False, num_chunks=5):
+def run_selection(project = None, records: Optional[str] = "", arms: Optional[str] = "", events: Optional[str] = "", fields: Optional[str] = "", syncronous=False, num_chunks=35):
     chosen_fields = [] # project.def_field
     chosen_forms = []
     chosen_records = []
@@ -169,7 +273,6 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
                 parsed_fields = parse_field_single_selection(selection_item = split_str["form_name"], selection_str = split_str["select_str"])
                 # add the fields
                 chosen_fields.extend(parsed_fields)
-
     # initialize the df as an empty list
     df = []
     # if running an asynchronous call
@@ -186,46 +289,60 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
         selection_criteria = {"records": chosen_records, "fields": chosen_fields, "forms": chosen_forms}
         # get all of the possible single item api calls: not implemented yet
         api_calls = extend_api_calls(selection_criteria=selection_criteria, num_chunks=num_chunks)
+        # drop any empty api_calls
+        api_calls = [x for x in api_calls if x != {}]
         #print(api_calls)
-        #print(project.export_records(**api_calls[0]))
         # run the api calls asynchronously
         results = asyncio.run(run_pycap_requests(project=project, function_name='export_records', api_calls=api_calls))
-        #results = asyncio.run(async_export(project=project, api_calls=api_calls))
         #print(results)
-        # format the results as if they were a single call -> NOTE: Should be able to use mergedeep package here
-
+        #print(len(results))
+        #print(type(results))
+        #print(results[0])
+        # rename to match downstream logic
+        df = results
     # if running a single call
     elif syncronous == True:
         # pull data using PyCap, convert to a pandas dataframe: will eventually be deprecated by async records call
         df = project.export_records(records=chosen_records, fields=chosen_fields, forms=chosen_forms)
-
+        # wrap into a list of length 1 to follow iterative logic that follow
+        df = [df]
     # at this point, return the df if it is empty
-    if df == []:
+    if df == [[]]:
         df = dict()
         json.dumps(df)
         df = json.loads(df)
         return df
-    # TODO: consider non-longitudinal studies? Skip arms and events if so? Query if longitudinal using PyCap metadata?
-    # if arms are given for the selection
-    if arms != "":
-        # TODO: check the regex instead
-        arms_list = arms.split(",")
-        # drop arms not in the selection
-        df = [x for x in df if x["redcap_event_name"].split("_arm_")[-1] in arms_list]
-	# if events are given for the selection
-    if events != "":
-        # TODO: check the regex instead
-        events_list = events.split(",")
-        # drop events not in the selection
-        df = [x for x in df if x["redcap_event_name"].split("_arm_")[0] in events_list]
-    # convert the dictionary to a dataframe
-    df = pd.DataFrame.from_dict(df)
-	# reformat to a wide dataframe
-    df = df.pivot(index = project.def_field, columns = "redcap_event_name") #chosen_fields[0]
-    collapsed_cols = []
-    for col in df.columns:
-        collapsed_cols.append(col[0] + '#' + col[1]) # '#' used to separate field and event
-    df.columns = collapsed_cols
+    # TODO: reformat the below to handle the single return dict (as given), or run each return dict and then merge
+    # if the project is longitudinal
+    if is_longitudinal(project):
+        # trin the longitudinal study of unwanted data
+        df = trim_longitudial_project(df=df, arms=arms, events=events)
+    # if the df is a list with a single dictionary
+    if isinstance(df, dict):
+        # convert the dictionary to a dataframe
+        df = pd.DataFrame.from_dict(df)
+    # if the df is a list of dictionaries
+    elif isinstance(df, list):
+        # convert the list of dictionaries to a list of dataframes
+        df = [pd.DataFrame.from_dict(x) for x in df]
+        # if there are multiple dataframe in the list
+        if len(df) > 1:
+            # merge the dataframes TODO: parallelize this merge
+            df = reduce(lambda x, y: pd.merge(x, y, how='outer', suffixes=(False, False)), df)
+        # otherwise
+        else:
+            df = df[0]
+    #print(df)
+    # if the study is longitudinal
+    if is_longitudinal(project):
+        # reformat to a wide dataframe
+        df = df.pivot(index = project.def_field, columns = "redcap_event_name") #chosen_fields[0]
+        collapsed_cols = []
+        for col in df.columns:
+            collapsed_cols.append(col[0] + '#' + col[1]) # '#' used to separate field and event
+        df.columns = collapsed_cols
+    #print(df)
+    # TODO: implement pipe running here (with its own cache?)
     # here, if the dataframe is empty and the only chosen field is the def_field (allows returning only records names)
     if df.empty and chosen_fields == [project.def_field]:
         # then set the df to a set of the records
@@ -237,6 +354,7 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
         # convert back to json and return
         df = df.to_json() 
     df = json.loads(df)
+    print(df)
     return df
 
 # convenience function for getting the greencap config file data, TODO: configure this to integrate with a system
