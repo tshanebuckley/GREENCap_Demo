@@ -156,8 +156,14 @@ def is_longitudinal(project):
         return False
 
 @sync_to_async
-def async_pycap(project, function_name, call_args):
+def async_pycap(project, function_name, call_args, call_id=None):
+    # use eval to dynamically pass a function name from PyCap
     func_response = eval('project.' + function_name + '(**{call_args})'.format(call_args=call_args))
+    # print to console that the current call has finished
+    if call_id == None:
+        print("API call for {func} has completed.".format(func=function_name))
+    else:
+        print("API call for {func} has completed, ID Number: {id_num}.".format(func=function_name, id_num=str(call_id)))
     #print(func_response)
     return func_response
 
@@ -166,9 +172,12 @@ async def run_pycap_requests(project, function_name, api_calls):
     print('Trying async {num_of_calls} call(s) ...'.format(num_of_calls=str(len(api_calls))))
     # get thge list of asynchronous api calls
     tasks = []
+    call_num = 0
     for api_call in api_calls:
+        # iterate the call_num
+        call_num = call_num + 1
         #print(api_call)
-        task = asyncio.ensure_future(async_pycap(project=project, function_name=function_name, call_args=api_call))
+        task = asyncio.ensure_future(async_pycap(project=project, function_name=function_name, call_args=api_call, call_id=call_num))
         tasks.append(task)
     # run and return the list of calls
     response = await asyncio.gather(*tasks)
@@ -243,7 +252,7 @@ r = requests.post(project.url, data=data).json() # create md5 from this and stor
 # TODO: implement caching, custom to rerun if internal REDCap logging updated
 # TODO: add defensive coding for whitespace handling, type checking, and field/form/record existence
 # covenience function for prunning a parsed selection
-def run_selection(project = None, records: Optional[str] = "", arms: Optional[str] = "", events: Optional[str] = "", fields: Optional[str] = "", syncronous=False, num_chunks=35):
+def run_selection(project = None, records: Optional[str] = "", arms: Optional[str] = "", events: Optional[str] = "", fields: Optional[str] = "", syncronous=False, num_chunks=50):
     chosen_fields = [] # project.def_field
     chosen_forms = []
     chosen_records = []
@@ -313,6 +322,7 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
         df = json.loads(df)
         return df
     # TODO: reformat the below to handle the single return dict (as given), or run each return dict and then merge
+    print("Finished getting requests, trimming and elongating if longitudinal...")
     # if the project is longitudinal
     if is_longitudinal(project):
         # trin the longitudinal study of unwanted data
