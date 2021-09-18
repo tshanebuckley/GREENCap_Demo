@@ -4,8 +4,8 @@ import os
 import yaml
 import redcap
 from asgiref.sync import sync_to_async, async_to_sync
-from .async_wrapper import for_all_methods
-from .request import GCRequest
+from .async_wrapper import for_all_methods_by_prefix
+from .requests import GCRequest
 
 # inherits from PyCap's Project Class
 @for_all_methods_by_prefix(sync_to_async)

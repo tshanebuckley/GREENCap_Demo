@@ -10,8 +10,10 @@ dependencies:
     - pycap
     - asgiref
     - fastapi
-    - nuvicorn
+    - uvicorn
     - yaml
     - configparser
     - mergedeep
+    - urwid
+    - aiohttp
     
