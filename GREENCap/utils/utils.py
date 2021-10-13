@@ -293,7 +293,7 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
         # if records, fields, or forms were not selected, "opt-in" for all of that criteria
         # NOTE: REDCap's API opts-in by default, but we must set these criteria manually to setup asynchronous calls
         if chosen_records == []:
-            # get the records 
+            # get the records
             chosen_records = run_selection(project=project, fields=project.def_field, syncronous=True)
         if chosen_fields == [] and chosen_forms ==[]:
             # get all of the fields
@@ -366,7 +366,7 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
     # otherwise
     else:
         # convert back to json and return
-        df = df.to_json() 
+        df = df.to_json()
     df = json.loads(df)
     print(df)
     return df
@@ -455,3 +455,91 @@ def get_arm_cname(cname=0) -> int:
     arm = int(arm)
     # return the arm
     return arm
+
+def import_event(path, unique_event_name, arm_num):
+    d = [{
+          'event_name':path,
+          'arm_num':arm_num,
+          'unique_event_name':unique_event_name,
+          'custom_event_label':None,
+        }]
+    json_d = str(json.dumps(d))
+
+
+    data = {
+        'token': '',
+        'content': 'event',
+        'action': 'import',
+        'format': 'json',
+        'data': json_d,
+        'returnFormat': 'json'
+    }
+    r = requests.post('https://www.ctsiredcap.pitt.edu/redcap/api/',data=data)
+    print('HTTP Status: ' + str(r.status_code))
+    print(r.json())
+    return r
+
+def import_file(zip_file=None, record=None, field=None, unique_event_name=None, file_obj=None):
+    #file_path=None
+    if zip_file:
+        file_path = zip_file
+        file_obj = open(file_path, 'rb')
+    data = {
+        'token': '',
+        'content': 'file',
+        'action': 'import',
+        'record': record,
+        'field': field,
+        'event': unique_event_name,
+        'returnFormat': 'json'
+    }
+    #if not file_obj: file_obj = open(file_path, 'rb')
+    r = requests.post('https://www.ctsiredcap.pitt.edu/redcap/api/',data=data,files={'file':file_obj})
+    if file_obj: file_obj.close()
+    print('HTTP Status: ' + str(r.status_code))
+    return r
+
+def auto_upload():
+    full_path = sys.argv[1]
+    print(full_path)
+     # "/Users/joshackerman/Desktop/UPMC Lab/dir1/dir2/testfile1.txt"
+
+    root = sys.argv[2]
+    # "UPMC Lab"
+
+    last_part = os.path.basename(full_path)
+    print("Last Part " + last_part)
+
+    shutil.make_archive(last_part, 'zip', full_path)
+    zip_file=last_part+".zip"
+
+    head, sep, tail = full_path.partition(root)
+    print(f"Head {head} Sep {sep} Tail {tail}")
+
+    path = tail.replace("/", "_")
+    path += "_zip"
+    unique_event_name = path+'_arm_4'
+    print(path)
+
+    print("Zip File "+zip_file)
+    print("unique_event_name "+unique_event_name)
+    r = import_event(path, unique_event_name, 4)
+    unique_event_name = unique_event_name[1:] # get rid of first underscore
+    r2 = import_file(zip_file, '4', 'behavior_file', unique_event_name)
+
+def nieve_upload(full_path=None, record=None, field=None, unique_event_name=None):
+    # python3 testredcap.py /Users/joshackerman/desktop/UPMC_Lab/dir1/dir2 3 behavior_file second_visit_arm_4
+    if not full_path: full_path = sys.argv[1]
+    if not record: record = sys.argv[2]
+    if not field: field = sys.argv[3]
+    if not unique_event_name: unique_event_name = sys.argv[4]
+
+    # make catches if they do not exist and create them
+
+    last_part = os.path.basename(full_path)
+    #print("Last Part " + last_part)
+
+    shutil.make_archive(last_part, 'zip', full_path)
+    zip_file=last_part+".zip"
+    import_file(zip_file, record, field, unique_event_name)
+    if zip_file: os.remove(zip_file)

@@ -1,2 +1,3 @@
 GREENCap/config/projects/**
 **/__pycache__
+*.DS*
