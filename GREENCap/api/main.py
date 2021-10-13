@@ -13,7 +13,7 @@ import multipart
 app = FastAPI()
 
 api_url = 'https://www.ctsiredcap.pitt.edu/redcap/api/'
-api_key = 'B7E72510F0662853A0B0DA5A5EF574E4'
+api_key = ''
 project = Project(api_url, api_key)
 
 @app.get("/forms")
