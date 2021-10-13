@@ -16,6 +16,7 @@ import redcap
 import contextlib
 import itertools
 import requests
+import pathlib
 
 # covenience function for parsing selections (arm, event, field)
 def parse_field_single_selection(selection_item = None, selection_str = None):
@@ -158,6 +159,7 @@ def is_longitudinal(project):
 @sync_to_async
 def async_pycap(project, function_name, call_args, call_id=None):
     # use eval to dynamically pass a function name from PyCap
+    # TODO: modify this eval to use a unique function
     func_response = eval('project.' + function_name + '(**{call_args})'.format(call_args=call_args))
     # print to console that the current call has finished
     if call_id == None:
@@ -230,6 +232,7 @@ def trim_longitudial_project(df, arms="", events="", n_cpus=1):
 #def save_pipeline_url(name, url):
 
 # method to store md5 checksum of the logging data, will be used for caching queries
+# cache successful data pulls as reports? -> cannot import records
 #def update_log_md5(project, seconds_earlier):
 '''
 import requests
@@ -251,6 +254,7 @@ r = requests.post(project.url, data=data).json() # create md5 from this and stor
 
 # TODO: implement caching, custom to rerun if internal REDCap logging updated
 # TODO: add defensive coding for whitespace handling, type checking, and field/form/record existence
+# TODO: implement pipes
 # covenience function for prunning a parsed selection
 def run_selection(project = None, records: Optional[str] = "", arms: Optional[str] = "", events: Optional[str] = "", fields: Optional[str] = "", syncronous=False, num_chunks=50):
     chosen_fields = [] # project.def_field
@@ -369,9 +373,12 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
 
 # convenience function for getting the greencap config file data, TODO: configure this to integrate with a system
 def get_greencap_config():
-    file_path = '../config/greencap_config.yaml'
+    file_path = str(pathlib.Path.home()) + '/.greencap/greencap_config.yaml'
     # open the file
-    f = open(file_path,)
+    try:
+        f = open(file_path,)
+    except:
+        f = open(file_path.replace('.yaml', '.yml'))
     # load the yaml as a dict
     d = yaml.load(f, Loader=yaml.FullLoader)
     # return the dict
@@ -379,7 +386,7 @@ def get_greencap_config():
 
 # convenience function for getting the config file data, TODO: configure this to integrate with a system
 def get_project_config(project = None):
-    file_path = '../config/projects/{proj}.json'.format(proj=project)
+    file_path = str(pathlib.Path.home()) + '/.greencap/projects/{proj}.json'.format(proj=project)
     # open the file
     f = open(file_path,)
     # load the json as a dict
