@@ -49,8 +49,8 @@ class REDCapProject(pydantic.BaseModel):
 class Project:
     # use the original __init__ with sycn _call_api
     def __init__(self, projects=[], verify_ssl=True, lazy=False, **kwargs):
-        # initialize a session
-        #self._session = Session()
+        # initialize a url variable
+        self.curr_url = ''
         # initialize kwargs
         self._kwargs = kwargs
         # initialize a dictionary of redcap projects
@@ -68,7 +68,7 @@ class Project:
         request_kwargs = self._kwargs
         request_kwargs.update(kwargs)
         # TODO: need to get RCRequest the url, should work after?
-        rcr = redcap.RCRequest(, payload, typpe) # self.url, 
+        rcr = redcap.RCRequest(self.curr_url, payload, typpe) # self.url, 
         return rcr, request_kwargs
 
     # method to add a project
@@ -92,7 +92,8 @@ class Project:
     # gets a payload
     def get_payload(self, rc_name, func_name, **func_kwargs):
         # pop something off the request queue
-
+        # set the current url
+        self.curr_url = self.redcap[rc_name].url
         # run the function
         rcr = eval("self.redcap['{name}'].".format(name=rc_name) + func_name + "(**func_kwargs)")
         # extract only the payload
