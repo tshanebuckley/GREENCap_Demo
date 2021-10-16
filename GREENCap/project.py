@@ -7,6 +7,7 @@ import redcap
 import asyncio
 import aiohttp
 import pydantic
+from requests import RequestException, Session
 from typing import Optional, List
 from asgiref.sync import sync_to_async, async_to_sync
 from .async_wrapper import for_all_methods_by_prefix
@@ -47,7 +48,11 @@ class REDCapProject(pydantic.BaseModel):
 # TODO: apply Plugin Design Pattern
 class Project:
     # use the original __init__ with sycn _call_api
-    def __init__(self, projects=[], verify_ssl=True, lazy=False):
+    def __init__(self, projects=[], verify_ssl=True, lazy=False, **kwargs):
+        # initialize a session
+        #self._session = Session()
+        # initialize kwargs
+        self._kwargs = kwargs
         # initialize a dictionary of redcap projects
         self.redcap = dict()
         # get the greencap Project a redcap Project to base itself around
@@ -60,13 +65,14 @@ class Project:
 
     # overwrite the sync _call_api method
     def _call_api(self, payload, typpe, **kwargs): # async
-        request_kwargs = self._kwargs()
+        request_kwargs = self._kwargs
         request_kwargs.update(kwargs)
-        rcr = redcap.RCRequest(self.url, payload, typpe)
+        # TODO: need to get RCRequest the url, should work after?
+        rcr = redcap.RCRequest(, payload, typpe) # self.url, 
         return rcr, request_kwargs
 
     # method to add a project
-    def add_project(name):
+    def add_project(self, name):
         # try to add the project
         try:
             # use pydantic to create a verified redcap connection
@@ -80,15 +86,15 @@ class Project:
             print(e.json())
 
     # add a request
-    def add_request():
+    def add_request(self):
         pass
 
     # gets a payload
-    def get_payload(self, func_name, **func_kwargs):
+    def get_payload(self, rc_name, func_name, **func_kwargs):
         # pop something off the request queue
 
         # run the function
-        rcr = eval("self.redcap." + func_name + "(**func_kwargs)")
+        rcr = eval("self.redcap['{name}'].".format(name=rc_name) + func_name + "(**func_kwargs)")
         # extract only the payload
         return rcr.payload
 
