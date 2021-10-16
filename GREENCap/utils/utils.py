@@ -256,12 +256,14 @@ r = requests.post(project.url, data=data).json() # create md5 from this and stor
 # TODO: add defensive coding for whitespace handling, type checking, and field/form/record existence
 # TODO: implement pipes
 # covenience function for prunning a parsed selection
-def run_selection(project = None, records: Optional[str] = "", arms: Optional[str] = "", events: Optional[str] = "", fields: Optional[str] = "", syncronous=False, num_chunks=50):
+def run_selection(project = None, records: Optional[str] = "", arms: Optional[str] = "", events: Optional[str] = "", forms: Optional[str] = "", fields: Optional[str] = "", syncronous=False, num_chunks=50):
     chosen_fields = [] # project.def_field
     chosen_forms = []
     chosen_records = []
     if records != "":
         chosen_records = records.split(';')
+    if forms != "":
+        chosen_forms = forms
     # if fields are given for the selection
     if fields != "":
         # add the optional selections
@@ -269,13 +271,13 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
         # for each field
         for selection in selected_fields:
             # determine if the selection is a single field, a selection of fields, or an entire form
-            is_type = field_or_form(project=project, item=selection)
+            is_type = field_or_selection(project=project, item=selection)
             # if it is whole form
-            if is_type == "form":
-                # add the form selection
-                chosen_forms.append(selection)
+            #if is_type == "form":
+            #    # add the form selection
+            #    chosen_forms.append(selection)
             # if it is a single field
-            elif is_type == "field":
+            if is_type == "field":
                 # add the single field selection
                 chosen_fields.append(selection)
             # if it is a selection of fields
@@ -295,7 +297,7 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
         if chosen_records == []:
             # get the records
             chosen_records = run_selection(project=project, fields=project.def_field, syncronous=True)
-        if chosen_fields == [] and chosen_forms ==[]:
+        if chosen_fields == [] and chosen_forms == []:
             # get all of the fields
             chosen_fields = project.field_names
         # get the kwargs
@@ -399,29 +401,31 @@ def create_project_config(name = None, url = None, token = None, identifier = No
     pass
 
 # convenience function to see if the item is a field or form
-def field_or_form(project = None, item = None):
+def field_or_selection(project = None, item = None):
     is_field = False
-    is_form = False
+    #is_form = False
     # check if field
     if item in project.field_names:
         is_field = True
     # check if form
-    if item in project.forms:
-        is_form = True
+    #if item in project.forms:
+    #    is_form = True
     # return options
-    if is_field == is_form == False and '[' in item:
+    if is_field == False and '[' in item:
         # split by '[' and grab the first item
         field_name = item.split('[')[0]
         if field_name in project.forms:
             return "field_selection"
-    elif is_field == is_form == False:
-        return "neither"
-    elif is_field == True and is_form == False:
+    #elif is_field == is_form == False:
+    #    return "neither"
+    elif is_field == True: #and is_form == False:
         return "field"
-    elif is_field == False and is_form == True:
-        return "form"
-    elif is_field == is_form == True:
-        return "both"
+    else:
+        return "neither"
+    #elif is_field == False and is_form == True:
+    #    return "form"
+    #elif is_field == is_form == True:
+    #    return "both"
 
 # convenience function for getting the field from the column name
 def get_field_cname(cname="", base=False) -> str:

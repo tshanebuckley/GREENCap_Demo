@@ -28,14 +28,14 @@ app = FastAPI()
 
 # general data dictionary query -> TODO: Make this async
 @app.get("/redcap/{project}/")
-def read_data(project: str, records: Optional[str] = "", arms: Optional[str] = "", events: Optional[str] = "", fields: Optional[str] = "", pipes: Optional[str] = ""):
+def read_data(project: str, records: Optional[str] = "", arms: Optional[str] = "", events: Optional[str] = "", forms: Optional[str] = "", fields: Optional[str] = ""):
     # NOTE: If the query string is saved somewhere, then the same pull can be saved, and automated
     # use project name to get url and token from config file
     cfg = utils.get_project_config(project=project)
     # connect to redcap
     rc = redcap.Project(cfg['url'], cfg['token'])
     # run the selection
-    csv = utils.run_selection(project=rc, records=records, arms=arms, events=events, fields=fields)
+    csv = utils.run_selection(project=rc, records=records, arms=arms, events=events, forms=forms, fields=fields)
     # pipes should be run and potentially parallelized locally on the aggregated dataframe, perhaps utilize dagster here
     #csv = utils.run_pipes(df=csv, pipes=pipes)
     # return the resultant csv
@@ -54,36 +54,52 @@ def read_meta(project: str, item: str):
     #os.system(selected_item)
     return selected_item
 
-@app.get("/forms")
-def forms():
-    forms = project.forms
-    return forms
+@app.get("/forms/{project}")
+def forms(project: str):
+    # use project name to get url and token from config file
+    cfg = utils.get_project_config(project=project)
+    # connect to redcap
+    rc = redcap.Project(cfg['url'], cfg['token'])
+    # return the forms
+    return rc.forms
 
-@app.get("/fields")
-def fields():
-    fields = project.field_names
-    return fields
+@app.get("/fields/{project}")
+def fields(project: str):
+    # use project name to get url and token from config file
+    cfg = utils.get_project_config(project=project)
+    # connect to redcap
+    rc = redcap.Project(cfg['url'], cfg['token'])
+    # return the fields
+    return rc.field_names
 
 # add parameter to request nums names, or both:
 # Done
-@app.get("/arms")
-@app.get("/arms/{type}")
-def arms(type: str = "names"):
+#@app.get("/arms/{project}")
+@app.get("/arms/{project}/{type}")
+def arms(project: str, type: str = "names"):
+    # use project name to get url and token from config file
+    cfg = utils.get_project_config(project=project)
+    # connect to redcap
+    rc = redcap.Project(cfg['url'], cfg['token'])
     # nums, names, or both
-    arm_names = project.arm_names
-    arm_nums = project.arm_nums
     if type == "names":
-        return arm_names
-    if type == "nums":
-        return arm_nums
+        return rc.arm_names
+    elif type == "nums":
+        return rc.arm_nums
+    elif type == "dict":
+        return dict(zip(rc.arm_names, rc.arm_nums))
     # default if someone enters something other than names and nums
-    return arm_names
+    #return arm_names
 
 # return only unique event names
 # Done
-@app.get("/events")
-def events():
-    events = project.events
+@app.get("/events/{project}")
+def events(project: str):
+    # use project name to get url and token from config file
+    cfg = utils.get_project_config(project=project)
+    # connect to redcap
+    rc = redcap.Project(cfg['url'], cfg['token'])
+    events = rc.events
     events = [x['unique_event_name'] for x in events]
     return events
 

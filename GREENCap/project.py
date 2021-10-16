@@ -15,7 +15,7 @@ from .utils import utils
 
 # method to create a redcap project
 def create_redcap_project(name=None):
-    creds = utils.get_project_config(project = "bsocial")
+    creds = utils.get_project_config(project = name)
     creds["name"] = name
     return REDCapProject(**creds)
 
@@ -28,9 +28,9 @@ class REDCapConnectError(Exception):
 
 # pydantic BaseClass object for a REDCap project
 class REDCapProject(pydantic.BaseModel):
-    name: str
     url: str
     token: str
+    name: str
 
     @pydantic.root_validator(pre=True)
     @classmethod
@@ -66,14 +66,27 @@ class Project:
         return rcr, request_kwargs
 
     # method to add a project
-    def add_project(project, ):
-        # add the project to the dict
-        self.projects[project.name] = redcap.Project(project.url, project.token, name=project.name)
-        # run the alterations
-        
+    def add_project(name):
+        # try to add the project
+        try:
+            # use pydantic to create a verified redcap connection
+            rc_data = create_redcap_project(name)
+            # add the project to the dict
+            self.redcap[rc_data.name] = redcap.Project(rc_data.url, rc_data.token, name=rc_data.name)
+            # run the alterations
+            setattr(self.redcap[rc_data.name], "_call_api", self._call_api)
+        # log the failure
+        except ValidationError as e:
+            print(e.json())
+
+    # add a request
+    def add_request():
+        pass
 
     # gets a payload
     def get_payload(self, func_name, **func_kwargs):
+        # pop something off the request queue
+
         # run the function
         rcr = eval("self.redcap." + func_name + "(**func_kwargs)")
         # extract only the payload
