@@ -53,21 +53,26 @@ class Project:
         self.curr_url = ''
         # initialize kwargs
         self._kwargs = kwargs
+        # initialize the aiohttp client
+        self._session = aiohttp.ClientSession()
         # initialize a dictionary of redcap projects
         self.redcap = dict()
         # get the greencap Project a redcap Project to base itself around
         for project in projects:
             self.add_project(project)
-        # add a variable for the current list of requests
-        self._requests = []
         # add a variable for the current list of payloads
-        self._payloads = []
+        self._payloads = [] # payload is the data for the post request
+        # add a variable for the current list of requests
+        self._requests = [] # requests are the payloads converted to requests
+        # add a variable for the current list of requests
+        self._tasks = [] # tasks are the requests converted into tasks
+        # add a variable for the current list of responses
+        self._responses = [] # responses are what is returned from the tasks
 
     # overwrite the sync _call_api method
     def _call_api(self, payload, typpe, **kwargs): # async
         request_kwargs = self._kwargs
         request_kwargs.update(kwargs)
-        # TODO: need to get RCRequest the url, should work after?
         rcr = redcap.RCRequest(self.curr_url, payload, typpe) # self.url, 
         return rcr, request_kwargs
 
@@ -86,12 +91,24 @@ class Project:
             print(e.json())
 
     # add a request
-    def add_request(self):
+    async def exec_request(self, data, method='POST', url=self.curr_url):
+        try:
+            response = await self._session.request(method=method, url=url, data=data)
+            response.raise_for_status()
+            print(f"Response status ({url}): {response.status}")
+        except HTTPError as http_err:
+            print(f"HTTP error occurred: {http_err}")
+        except Exception as err:
+            print(f"An error ocurred: {err}")
+            response_json = await response.json()
+            return response_json
+
+    # execute a request
+    def exec_requests(self):
         pass
 
     # gets a payload
     def get_payload(self, rc_name, func_name, **func_kwargs):
-        # pop something off the request queue
         # set the current url
         self.curr_url = self.redcap[rc_name].url
         # run the function
@@ -99,6 +116,19 @@ class Project:
         # extract only the payload
         return rcr.payload
 
-    # method to get tasks from payloads
-    def get_tasks(self, payload):
+    # TODO: utilize the chunking from utils
+    # gets the payloads by extending to all possible calls and then chunking them
+    def get_payloads():
         pass
+
+    # method to add tasks from payloads
+    def add_task(self, rc_name, func_name):
+        tasks = []
+        call_num = 0
+        for api_call in api_calls:
+            # iterate the call_num
+            call_num = call_num + 1
+            #print(api_call)
+            task = asyncio.ensure_future()
+            tasks.append(task)
+        self._tasks.append(tasks)
