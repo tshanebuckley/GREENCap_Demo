@@ -34,16 +34,51 @@ class REDCapConnectError(Exception):
 # The payload should also include a reattempt method for retries of data pulls.
 # Will also need a Tasks object
 
+# class to manage payloads, simply has an _id for each payload
+#class REDCapPayloadManager():
+
 # redcap payload class
 class REDCapPayload(pydantic.BaseModel):
     _id: str
-    payloads: list = []
-    response: str = None
-    creation_time: datetime = datetime.now()
+    payloads: list
+    response: list
+    creation_time: datetime
     request_time: datetime
     response_time: datetime
-    call_time: timedelta
+    call_time: datetime
     status: str = 'created' # can be created, running, completed
+
+    # NOTE: all logic should be called when this class is initialized
+    # Will get payloads as tasks, execute, and return the response
+    async def __init__(self, **data):
+        super().__init__(**data)
+        # set the id
+        self._id = _id
+        # set the payload list
+        self.payloads = payloads
+        # set the creation time
+        self.creation_time = datetime.now()
+        # set the task list
+        tasks = list()
+        # for each payload given
+        for pload in self.payloads:
+            # create a task 
+            # NOTE: need a method to convert payloads to resuests so that they can be added to the list of tasks
+            task = asyncio.ensure_future()
+            # append that task to the list of tasks
+            tasks.append(task)
+        # set the request_time
+        self.request_time = datetime.now()
+        # set the status to 'running'
+        self.status = 'running'
+        # execute the request
+        self.response = await asyncio.gather(*tasks)
+        # set the response time
+        self.response_time = datetime.now()
+        # set the status to 'completed'
+        self.status = 'completed'
+        # set the call_time as request_time - response_time
+        self.call_time = self.request_time - self.response_time
 
 # pydantic BaseClass object for a REDCap project
 class REDCapProject(pydantic.BaseModel):
@@ -205,14 +240,3 @@ class Project:
     def exec_request():
         pass
 
-    # method to add get all of the tasks for a Payload object into a Tasks object
-    def add_tasks(self, rc_name, func_name):
-        tasks = []
-        call_num = 0
-        for api_call in api_calls:
-            # iterate the call_num
-            call_num = call_num + 1
-            #print(api_call)
-            task = asyncio.ensure_future()
-            tasks.append(task)
-        self._tasks.append(tasks)
