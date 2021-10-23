@@ -79,9 +79,17 @@ def merge_chunk(chunk_as_list_of_dicts):
 
 # TODO: parallelize this
 # method to create all individual api calls for a selection, follows an "opt-in" approach instead of PyCaps's "opt-out" approach on selection
-def extend_api_calls(selection_criteria=None, extended_by=['records'], num_chunks=10): # , 'fields', 'forms'
+def extend_api_calls(project, selection_criteria=None, extended_by=['records'], num_chunks=10): # , 'fields', 'forms'
     # drop any empty selection criteria
     selection_criteria = {key: selection_criteria[key] for key in selection_criteria.keys() if selection_criteria[key] != []}
+    # for any selection criteria set to 'all', set to a list of all items for that project
+    # TODO: add some type of schema here
+    # update what is given the selection criteria if 'all' is selected
+    for key in selection_criteria.keys():
+        # if selecting all elements of this
+        if selection_criteria[key] == 'all':
+            # update the selection
+            selection_criteria[key] = getattr(project, key) # can add a schema here that attempts this if not found in schema
     # get the set of criteria to not extend by
     not_extended_by = set(selection_criteria.keys()) - set(extended_by)
     # if not_extended_by is empty, then set it to None
@@ -125,6 +133,8 @@ def extend_api_calls(selection_criteria=None, extended_by=['records'], num_chunk
         return chunked_calls_merged
     # chunk the calls
     final_call_list = condense_to_chunks(all_api_calls=extended_call_list_of_dicts, num_chunks=num_chunks)
+    # drop any empty api_calls
+    final_call_list = [x for x in final_call_list if x != {}]
     #print(final_call_list)
     # return the list of api requests
     return final_call_list
@@ -263,7 +273,7 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
     if records != "":
         chosen_records = records.split(';')
     if forms != "":
-        chosen_forms = forms
+        chosen_forms = forms.split(';')
     # if fields are given for the selection
     if fields != "":
         # add the optional selections
@@ -302,10 +312,8 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
             chosen_fields = project.field_names
         # get the kwargs
         selection_criteria = {"records": chosen_records, "fields": chosen_fields, "forms": chosen_forms}
-        # get all of the possible single item api calls: not implemented yet
-        api_calls = extend_api_calls(selection_criteria=selection_criteria, num_chunks=num_chunks)
-        # drop any empty api_calls
-        api_calls = [x for x in api_calls if x != {}]
+        # get all of the possible single item api calls
+        api_calls = extend_api_calls(project, selection_criteria=selection_criteria, num_chunks=num_chunks)
         #print(api_calls)
         # run the api calls asynchronously
         results = asyncio.run(run_pycap_requests(project=project, function_name='export_records', api_calls=api_calls))
