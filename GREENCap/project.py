@@ -8,6 +8,7 @@ import redcap
 import asyncio
 import aiohttp
 import pydantic
+from uuid import uuid4
 from datetime import date, datetime, time, timedelta
 from requests import RequestException, Session
 from typing import Optional, List
@@ -35,36 +36,56 @@ class REDCapConnectError(Exception):
 # Will also need a Tasks object
 
 # class to manage payloads, simply has an _id for each payload
-#class REDCapPayloadManager():
+#class REDCapRequestManager():
+#    def __init__(self):
+#        self.requests = list()
 
+# NOTE: can has a custom error for this class that runs if it fails to initialize
+# Something like this...
+# try:
+#     REDCapPayload()
+# except:
+#     REDCapPayloadError() 
+
+# function to run a REDCapRequest
+
+# TODO: come back and make this verify with pydantic
 # redcap payload class
-class REDCapPayload(pydantic.BaseModel):
-    _id: str
-    payloads: list
-    response: list
-    creation_time: datetime
-    request_time: datetime
-    response_time: datetime
-    call_time: datetime
-    status: str = 'created' # can be created, running, completed
+class REDCapRequest(): # pydantic.BaseModel
+    #_id: str
+    #payloads: list
+    #response: list
+    #creation_time: datetime
+    #request_time: datetime
+    #response_time: datetime
+    #call_time: datetime
+    #status: str = 'created' # can be created, running, completed
 
     # NOTE: all logic should be called when this class is initialized
-    # Will get payloads as tasks, execute, and return the response
-    async def __init__(self, **data):
-        super().__init__(**data)
+    # Will get payloads as tasks, execute the request, and return the response
+    def __init__(self, _id, payloads, **data):
+        '''
+        The argument of **data must include values for 'url' and 'method'. It can also included
+        other arguments used by aiohttp.ClientSession().request().
+        '''
+        #super().__init__(_id, payloads, **data)
         # set the id
         self._id = _id
+        # create a session for this request
+        self.session = aiohttp.ClientSession()
         # set the payload list
         self.payloads = payloads
         # set the creation time
         self.creation_time = datetime.now()
+
+    async def run(self):
         # set the task list
         tasks = list()
         # for each payload given
         for pload in self.payloads:
             # create a task 
             # NOTE: need a method to convert payloads to resuests so that they can be added to the list of tasks
-            task = asyncio.ensure_future()
+            task = asyncio.ensure_future(self.session.request(**pload))
             # append that task to the list of tasks
             tasks.append(task)
         # set the request_time
@@ -77,8 +98,30 @@ class REDCapPayload(pydantic.BaseModel):
         self.response_time = datetime.now()
         # set the status to 'completed'
         self.status = 'completed'
-        # set the call_time as request_time - response_time
-        self.call_time = self.request_time - self.response_time
+        # close the session
+        await self.session.close()
+        # set the call_time as response_time - request_time
+        self.call_time = self.response_time - self.request_time
+        # convert times into strings and call time into seconds
+        self.creation_time = str(creation_time)
+        self.request_time = str(self.request_time)
+        self.response_time = str(self.response_time)
+        self.call_time = self.call_time.total_seconds()
+        # set a content list
+        tasks = list()
+        # extract the content from the response into a variable
+        for resp in self.response:
+            # if the resp yielded content
+            if resp.content._size > 0:
+                # create a task
+                task = asyncio.ensure_future(resp.content.read())
+            # append to the list
+            tasks.append(task)
+        # extract the response content
+        self.content = await asyncio.gather(*tasks)
+        # create the dataframe
+        self.df = None
+
 
 # pydantic BaseClass object for a REDCap project
 class REDCapProject(pydantic.BaseModel):
@@ -134,25 +177,20 @@ class Project:
         # initialize kwargs
         self._kwargs = kwargs
         # initialize the aiohttp client
-        self._session = aiohttp.ClientSession()
+        #self._session = aiohttp.ClientSession()
         # initialize a dictionary of redcap projects
+        # NOTE: will probably change this to self.remotes
         self.redcap = dict()
         # get the greencap Project a redcap Project to base itself around
         for project in projects:
             self.add_project(project)
         # add a variable for the current list of payloads
-        self._payloads = [] # payload is the data for the post request
-        # add a variable for the current list of requests
-        self._requests = [] # requests are the payloads converted to requests
-        # add a variable for the current list of requests
-        self._tasks = [] # tasks are the requests converted into tasks
-        # add a variable for the current list of responses
-        #self._responses = [] # responses are what is returned from the tasks
+        self._payloads = dict() # payload is the data for the post request
 
     # function to close the aiohttp client session on exit
-    @atexit.register
-    def _end_session(self):
-        self._session.close()
+    #@atexit.register
+    #def _end_session(self):
+    #    self._session.close()
 
     # overwrite the sync _call_api method
     def _call_api(self, payload, typpe, **kwargs): # async
@@ -208,16 +246,19 @@ class Project:
     '''
 
     # gets a payload
-    def get_payload(self, rc_name, func_name, **func_kwargs):
+    @sync_to_async
+    def get_payload(self, rc_name, func_name, method, **func_kwargs):
         # set the current url
         self.curr_url = self.redcap[rc_name].url
         # run the function
         rcr = eval("self.redcap['{name}'].".format(name=rc_name) + func_name + "(**func_kwargs)")
+        # create a dictionary of the kwargs
+        request_args = {'url':self.redcap[rc_name].url, 'data':rcr.payload, 'method':method}
         # extract only the payload, a tuple of the url to make the request to and the payload
-        return (self.redcap[rc_name].url, rcr.payload)
+        return request_args
 
     # gets the payloads by extending to all possible calls and then chunking them
-    def get_payloads(self, selection_criteria=None, extended_by=None, num_chunks=None, rc_name=None, func_name=None):
+    async def exec_request(self, method, selection_criteria=None, extended_by=None, num_chunks=None, rc_name=None, func_name=None):
         # set some variables defined by the object if not set by the function
         if num_chunks == None:
             num_chunks = self.num_chunks
@@ -226,17 +267,24 @@ class Project:
         # get the api calls
         api_calls = utils.extend_api_calls(self.redcap[rc_name], selection_criteria=selection_criteria, extended_by=extended_by, num_chunks=num_chunks)
         # initialize a Payload object to save the payloads to
-        pload = REDCapPayload()
+        ploads = list()
         # for each api call
         for call in api_calls:
+            # create a payload
+            pload = asyncio.ensure_future(self.get_payload(rc_name=rc_name, func_name=func_name, method=method, **call))
             # generate and save the payloads as a Payload object
-            pload.add(self.get_payload(rc_name=rc_name, func_name=func_name, **call))
+            ploads.append(pload)
+        # run the payload generation
+        ploads = await asyncio.gather(*ploads)
+        # get an id for the payload/request
+        _id = str(uuid4())
         # save this new Payload object within the class
-        self._payloads.append(pload)
-
-    # seems like the below 'add_tasks' function could be moved into Payloads object
-    # along with a similar execute request function...though some type of execution
-    # function would still be required in this class as a top-level call.
-    def exec_request():
-        pass
-
+        self._payloads[_id] = ploads
+        # create the request
+        req = REDCapRequest(_id=_id, payloads=ploads)
+        # submit the request
+        await req.run() # response = 
+        # drop the payload from the _payloads dict
+        #del self._payloads[_id]
+        # return the response
+        return req
