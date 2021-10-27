@@ -100,7 +100,7 @@ def events(project: str):
     # connect to redcap
     rc = redcap.Project(cfg['url'], cfg['token'])
     events = rc.events
-    events = [x['unique_event_name'] for x in events]
+    events = [x['unique_event_name'].split('_arm_')[0] for x in events]
     return events
 
 # add file functionality
