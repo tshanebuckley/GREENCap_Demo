@@ -329,6 +329,8 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
         df = project.export_records(records=chosen_records, fields=chosen_fields, forms=chosen_forms)
         # wrap into a list of length 1 to follow iterative logic that follow
         df = [df]
+    #df = clean_content()
+    #-----------------------
     # at this point, return the df if it is empty
     if df == [[]]:
         df = dict()
@@ -365,6 +367,7 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
         for col in df.columns:
             collapsed_cols.append(col[0] + '#' + col[1]) # '#' used to separate field and event
         df.columns = collapsed_cols
+    #_______________________
     #print(df)
     # TODO: implement pipe running here (with its own cache?)
     # here, if the dataframe is empty and the only chosen field is the def_field (allows returning only records names)
@@ -379,6 +382,48 @@ def run_selection(project = None, records: Optional[str] = "", arms: Optional[st
         df = df.to_json()
     df = json.loads(df)
     print(df)
+    return df
+
+# method to merge the content returned by the response
+# NOTE: should likely implement caching into thos method or the data fetch before it?
+def clean_content(df, longitudinal=False, arms=None, events=None):
+    # at this point, return the df if it is empty
+    if df == [[]]:
+        df = dict()
+        json.dumps(df)
+        df = json.loads(df)
+        return df
+    # TODO: reformat the below to handle the single return dict (as given), or run each return dict and then merge
+    print("Finished getting requests, trimming and elongating if longitudinal...")
+    # if the project is longitudinal
+    if longitudinal:
+        # trim the longitudinal study of unwanted data
+        df = trim_longitudial_project(df=df, arms=arms, events=events)
+    # if the df is a list with a single dictionary
+    if isinstance(df, dict):
+        # convert the dictionary to a dataframe
+        df = pd.DataFrame.from_dict(df)
+    # if the df is a list of dictionaries
+    elif isinstance(df, list):
+        # convert the list of dictionaries to a list of dataframes
+        df = [pd.DataFrame.from_dict(x) for x in df]
+        # if there are multiple dataframe in the list
+        if len(df) > 1:
+            # merge the dataframes TODO: parallelize this merge
+            df = reduce(lambda x, y: pd.merge(x, y, how='outer', suffixes=(False, False)), df)
+        # otherwise
+        else:
+            df = df[0]
+    #print(df)
+    # if the study is longitudinal
+    if longitudinal:
+        # reformat to a wide dataframe
+        df = df.pivot(index = project.def_field, columns = "redcap_event_name") #chosen_fields[0]
+        collapsed_cols = []
+        for col in df.columns:
+            collapsed_cols.append(col[0] + '#' + col[1]) # '#' used to separate field and event
+        df.columns = collapsed_cols
+    # return the data
     return df
 
 # convenience function for getting the greencap config file data, TODO: configure this to integrate with a system

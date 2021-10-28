@@ -8,6 +8,7 @@ import redcap
 import asyncio
 import aiohttp
 import pydantic
+import tqdm
 from uuid import uuid4
 from datetime import date, datetime, time, timedelta
 from requests import RequestException, Session
@@ -62,6 +63,7 @@ class REDCapRequest(): # pydantic.BaseModel
     #status: str = 'created' # can be created, running, completed
 
     # NOTE: all logic should be called when this class is initialized
+    # NOTE: look into why forms for all records are failing
     # Will get payloads as tasks, execute the request, and return the response
     def __init__(self, _id, payloads, **data):
         '''
@@ -88,12 +90,15 @@ class REDCapRequest(): # pydantic.BaseModel
             task = asyncio.ensure_future(self.session.request(**pload))
             # append that task to the list of tasks
             tasks.append(task)
+        # add a progress bar
+        #prog = [await f for f in tqdm.tqdm(asyncio.as_completed(tasks), total=len(tasks))]
         # set the request_time
         self.request_time = datetime.now()
         # set the status to 'running'
         self.status = 'running'
-        # execute the request
-        self.response = await asyncio.gather(*tasks)
+        # execute the request with progress bar
+        #self.response = await asyncio.gather(*tasks)
+        self.response = [await f for f in tqdm.tqdm(asyncio.as_completed(tasks), total=len(tasks))]
         # set the response time
         self.response_time = datetime.now()
         # set the status to 'completed'
@@ -103,10 +108,11 @@ class REDCapRequest(): # pydantic.BaseModel
         # set the call_time as response_time - request_time
         self.call_time = self.response_time - self.request_time
         # convert times into strings and call time into seconds
-        self.creation_time = str(creation_time)
+        self.creation_time = str(self.creation_time)
         self.request_time = str(self.request_time)
         self.response_time = str(self.response_time)
         self.call_time = self.call_time.total_seconds()
+        #print(self.response)
         # set a content list
         tasks = list()
         # extract the content from the response into a variable
@@ -117,11 +123,21 @@ class REDCapRequest(): # pydantic.BaseModel
                 task = asyncio.ensure_future(resp.content.read())
             # append to the list
             tasks.append(task)
-        # extract the response content
-        self.content = await asyncio.gather(*tasks)
-        # create the dataframe
-        self.df = None
-
+        # verify the returned content
+        try:
+            response_length =  [x._cache['headers']['Content-Length'] for x in self.response]
+            if '0' not in response_length:
+                # extract the response content
+                #self.content = await asyncio.gather(*tasks)
+                self.content = [await f for f in tqdm.tqdm(asyncio.as_completed(tasks), total=len(tasks))]
+                # create the dataframe
+                #self.data = utils.clean_content(df=self.content, )
+            else:
+                self.content = []
+        # otherwise
+        except:
+            print("Request failed: likely requires smaller chunks.")
+            self.content = []
 
 # pydantic BaseClass object for a REDCap project
 class REDCapProject(pydantic.BaseModel):
@@ -266,6 +282,8 @@ class Project:
             extended_by = self.extended_by
         # get the api calls
         api_calls = utils.extend_api_calls(self.redcap[rc_name], selection_criteria=selection_criteria, extended_by=extended_by, num_chunks=num_chunks)
+        # log number of calls
+        print("Executing {n} requests...".format(n=str(len(api_calls))))
         # initialize a Payload object to save the payloads to
         ploads = list()
         # for each api call
@@ -280,10 +298,14 @@ class Project:
         _id = str(uuid4())
         # save this new Payload object within the class
         self._payloads[_id] = ploads
+        # determine if the project is longitudinal
+        long = utils.is_longitudinal(self.redcap['bsocial'])
         # create the request
-        req = REDCapRequest(_id=_id, payloads=ploads)
+        req = REDCapRequest(_id=_id, payloads=ploads, longitudinal=long, arms=None, events=None)
         # submit the request
         await req.run() # response = 
+        # log that the calls have finished
+        print("{n} requests have finished.".format(n=str(len(req.content))))
         # drop the payload from the _payloads dict
         #del self._payloads[_id]
         # return the response
