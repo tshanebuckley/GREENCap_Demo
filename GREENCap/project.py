@@ -14,8 +14,8 @@ from datetime import date, datetime, time, timedelta
 from requests import RequestException, Session
 from typing import Optional, List
 from asgiref.sync import sync_to_async, async_to_sync
-from .async_wrapper import for_all_methods_by_prefix
-from .requests import GCRequest
+#from .async_wrapper import for_all_methods_by_prefix
+#from .requests import GCRequest
 from .utils import utils
 
 # method to create a redcap project
@@ -65,7 +65,7 @@ class REDCapRequest(): # pydantic.BaseModel
     # NOTE: all logic should be called when this class is initialized
     # NOTE: look into why forms for all records are failing
     # Will get payloads as tasks, execute the request, and return the response
-    def __init__(self, _id, payloads, **data):
+    def __init__(self, _id, payloads, sleep_time, **data):
         '''
         The argument of **data must include values for 'url' and 'method'. It can also included
         other arguments used by aiohttp.ClientSession().request().
@@ -79,15 +79,24 @@ class REDCapRequest(): # pydantic.BaseModel
         self.payloads = payloads
         # set the creation time
         self.creation_time = datetime.now()
+        # save the sleep time used per execution of each task
+        self.sleep_time = sleep_time
 
     async def run(self):
+        # sub function to apply a sleep
+        # TODO: use same logic as below to read streams in the same thread as the request
+        async def fetch(sleep_time, my_coroutine):
+            await(asyncio.sleep(sleep_time))
+            r = await my_coroutine
+            #print(r)
+            return r
         # set the task list
         tasks = list()
         # for each payload given
         for pload in self.payloads:
             # create a task 
             # NOTE: need a method to convert payloads to resuests so that they can be added to the list of tasks
-            task = asyncio.ensure_future(self.session.request(**pload))
+            task = asyncio.ensure_future(apply_sleep(self.sleep_time, self.session.request(**pload)))
             # append that task to the list of tasks
             tasks.append(task)
         # add a progress bar
@@ -274,7 +283,7 @@ class Project:
         return request_args
 
     # gets the payloads by extending to all possible calls and then chunking them
-    async def exec_request(self, method, selection_criteria=None, extended_by=None, num_chunks=None, rc_name=None, func_name=None):
+    async def exec_request(self, method, selection_criteria=None, extended_by=None, num_chunks=None, rc_name=None, func_name=None, sleep_time=0):
         # set some variables defined by the object if not set by the function
         if num_chunks == None:
             num_chunks = self.num_chunks
@@ -301,7 +310,7 @@ class Project:
         # determine if the project is longitudinal
         long = utils.is_longitudinal(self.redcap['bsocial'])
         # create the request
-        req = REDCapRequest(_id=_id, payloads=ploads, longitudinal=long, arms=None, events=None)
+        req = REDCapRequest(_id=_id, payloads=ploads, longitudinal=long, arms=None, events=None, sleep_time=sleep_time)
         # submit the request
         await req.run() # response = 
         # log that the calls have finished

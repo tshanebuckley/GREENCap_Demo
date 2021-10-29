@@ -78,6 +78,7 @@ def merge_chunk(chunk_as_list_of_dicts):
     return chunk_as_dict
 
 # TODO: parallelize this
+# TODO: try adding events to extended_by
 # method to create all individual api calls for a selection, follows an "opt-in" approach instead of PyCaps's "opt-out" approach on selection
 def extend_api_calls(project, selection_criteria=None, extended_by=['records'], num_chunks=10): # , 'fields', 'forms'
     # drop any empty selection criteria
@@ -89,7 +90,7 @@ def extend_api_calls(project, selection_criteria=None, extended_by=['records'], 
         # if selecting all elements of this
         if selection_criteria[key] == 'all':
             # update the selection
-            selection_criteria[key] = getattr(project, key) # can add a schema here that attempts this if not found in schema
+            selection_criteria[key] = getattr(project, key) # NOTE: can add a schema here that attempts this if not found in schema
     # get the set of criteria to not extend by
     not_extended_by = set(selection_criteria.keys()) - set(extended_by)
     # if not_extended_by is empty, then set it to None

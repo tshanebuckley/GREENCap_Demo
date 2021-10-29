@@ -12,8 +12,6 @@ import sys
 import shutil
 import requests
 import time
-
-#from testredcap import *
 import multipart
 # allow utils and pipes to be part of scope
 currentdir = os.path.dirname(os.path.realpath(__file__))
@@ -22,6 +20,10 @@ sys.path.append(parentdir)
 # import utils
 from utils import utils
 import pipes
+import greencap
+
+# initialize a GREENCap object
+grncap = greencap.Project()
 
 # initialize FastAPI
 app = FastAPI()
