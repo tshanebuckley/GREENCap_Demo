@@ -9,9 +9,9 @@ setup(name='greencap',
       #license='MIT',
       python_requires='>=3.6',
       package_dir={'': 'GREENCap/greencap'},
-      #packages=['greencap'],
+      packages=['greencap'],
       include_package_data=True,
-      packages=find_packages(),
+      #packages=find_packages(),
       install_requires=[],
       zip_safe=False
       )
