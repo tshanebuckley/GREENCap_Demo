@@ -11,7 +11,7 @@ setup(name='greencap',
       #package_dir={'': 'GREENCap/greencap'},
       packages=['greencap'],
       include_package_data=True,
-      #packages=find_packages(),
+      packages=find_packages(),
       install_requires=[],
       zip_safe=False
       )
