@@ -7,6 +7,10 @@ library(stringi)
 library(jsonlite)
 library(DT)
 library(reticulate)
+library(shinyWidgets)
+
+
+# Allow for multiple options to be selected per filter
 
 # Setting up UI
 ui <- fluidPage(theme = shinytheme('cerulean'),
@@ -27,25 +31,39 @@ ui <- fluidPage(theme = shinytheme('cerulean'),
         textInput('project',
                   label = 'Projects:', ''),
         
-        textInput('fields',
-                  label = 'Fields:', ''),
+        actionButton('getFields', 'Get Options'),
         
-        textInput('forms',
-                  label = 'Forms:', ''),
+        uiOutput('formsDrop'),
         
-        textInput('arm',
-                  label = 'Arm:', ''),
+        uiOutput('fieldsDrop'),
         
-        textInput('events',
-                  label = 'Events:', ''),
+        uiOutput('armsDrop'),
         
-        textInput('pipe',
-                  label = 'Pipe:', ''),
+        uiOutput('eventsDrop'),
         
-        textInput('records',
-                  label = 'Records:', ''),
+        uiOutput('recordsText'),
+        
+        # textInput('fields',
+        #           label = 'Fields:', ''),
+        # 
+        # textInput('forms',
+        #           label = 'Forms:', ''),
+        # 
+        # textInput('arm',
+        #           label = 'Arm:', ''),
+        # 
+        # textInput('events',
+        #           label = 'Events:', ''),
+        # 
+        # textInput('pipe',
+        #           label = 'Pipe:', ''),
+        # 
+        # textInput('records',
+        #           label = 'Records:', ''),
         
         # Execute fetch
+        h3(''),
+        
         actionButton('updateUrl', 'Analyze Output'),
         
         # Outputted URL
@@ -118,95 +136,179 @@ ui <- fluidPage(theme = shinytheme('cerulean'),
 # Setting up server
 server <- function(input, output) {
 
-  # Basic url for data fetching without parameters
+  # Basic url for data fetching
   baseurl <- 'http://127.0.0.1:8000/redcap/'
   
   # Reactive string of parameters for url fetch
   querystring <- reactiveVal()
   
+  # Parameter specific urls for getting dropdowns
+  formsurl <- 'http://127.0.0.1:8000/forms/'
+  fieldsurl <- 'http://127.0.0.1:8000/fields/'
+  armsurl <- 'http://127.0.0.1:8000/arms/'
+  eventsurl <- 'http://127.0.0.1:8000/events/'
   
-  # Reactively updating filter variables with user input
+  
+  # Retrieving project name to begin fetching dropdowns
   projecturl <- reactive({
     if (input$project == '')
       return(NULL)
     else
-      return(paste0(input$project, '/?'))
-      
+      return(input$project)
+    
   })
-  fieldsurl <- reactive({
-    if (input$fields == '')
+  
+  
+  # When user executes data fetch (pressing action button)
+  observeEvent(input$getFields, {
+    
+    
+    # Fetch the urls for each parameter and output them
+    forms <- content(GET(paste0(formsurl, projecturl())))
+    formsOptions <- c('\n')
+    for(i in 1:length(forms)){
+      formsOptions <- c(formsOptions, forms[i])
+    }
+    
+    output$formsDrop <- renderUI({
+      if (length(forms) == 0)
+        return(NULL)
+      selectInput('forms', 'Forms:', formsOptions)
+    })
+      
+    fields <- content(GET(paste0(fieldsurl, projecturl())))
+    fieldsOptions <- c('\n')
+    for(i in 1:length(fields)){
+      fieldsOptions <- c(fieldsOptions, fields[i])
+    }
+    
+    output$fieldsDrop <- renderUI({
+      if (length(fields) == 0)
+        return(NULL)
+      pickerInput('fields', 'Fields:', fieldsOptions, multiple = FALSE, options = pickerOptions(maxOptions = 10000, liveSearch = TRUE))
+    })
+    
+    # for arms, only get nums as 'type'
+    armsNums <- content(GET(paste0(armsurl, projecturl(), '/nums')))
+    armsOptions <- c('\n')
+    for(i in 1:length(armsNums)){
+      armsOptions <- c(armsOptions, armsNums[i])
+    }
+
+    output$armsDrop <- renderUI({
+      if (length(armsOptions) == 1)
+        return(NULL)
+      selectInput('arms', 'Arms:', armsOptions)
+    })
+    
+    events <- content(GET(paste0(eventsurl, projecturl())))
+    eventsOptions <- c('\n')
+    for(i in 1:length(events)){
+      eventsOptions <- c(eventsOptions, events[i])
+    }
+    
+    output$eventsDrop <- renderUI({
+      if (length(events) == 0)
+        return(NULL)
+      selectInput('events', 'Events:', eventsOptions)
+    })
+    
+    output$recordsText <- renderUI({
+      textInput('records', 'Records:')
+    })
+  
+  })
+  
+  # Reactively updating filter variables with user input
+  
+  fieldsPar <- reactive({
+    if (input$fields == '\n')
       return(NULL)
     else
       return(paste0('fields=', input$fields))
   })
-  formsurl <- reactive({
-    if (input$forms == '')
+  formsPar <- reactive({
+    if (input$forms == '\n')
       return(NULL)
     else
       return(paste0('forms=', input$forms))
   })
-  armurl <- reactive({
-    if (input$arm == '')
+  
+  armsPar <- reactive({
+    if (input$arms == '\n')
       return(NULL)
     else
-      return(paste0('arm=', input$arm))
+      return(paste0('arms=', input$arms))
   })
-  eventsurl <- reactive({
-    if (input$events == '')
+  
+  eventsPar <- reactive({
+    if (input$events == '\n')
       return(NULL)
     else
       return(paste0('events=',input$events))
   })
-  pipeurl <- reactive({
-    if (input$pipe == '')
-      return(NULL)
-    else
-      return(paste0('pipe=',input$pipe))
-  })
-  recordsurl <- reactive({
+  
+  # pipesPar() <- reactive({
+  #   if (input$pipe == '')
+  #     return(NULL)
+  #   else
+  #     return(paste0('pipe=',input$pipe))
+  # })
+  
+  recordsPar <- reactive({
     if (input$records == '')
       return(NULL)
     else
       return(paste0('records=', input$records))
   })
   
-  # When user executes data fetch (pressing action button)
-  observeEvent(input$updateUrl, {
+  # Actions when fetch button is pressed
+  observeEvent( input$updateUrl, {
     
     # Creates string with up-to-date filter parameters
     new_query <-
-      stri_paste(recordsurl(), armurl(), eventsurl(), fieldsurl(), pipeurl(), formsurl(), sep='&', ignore_null = TRUE)
+    stri_paste(formsPar(), fieldsPar(), eventsPar(), armsPar(), recordsPar(), sep='&', ignore_null = TRUE)
     
     # Assigns string to reactive string
     querystring(new_query)
     
-    # Fetch the url with query string
-    r <- content(GET(paste0(baseurl, projecturl(), querystring())))
     
-    # Read fetched url content as a csv
-    table <- read.csv(text=r)
+    # fetch finalized data query
+    r <- content(GET(paste0(baseurl,projecturl(), '/?',querystring())))
     
-    # Output data table to UI
-    output$table <- renderTable({
-      table
+    # process json to display as data table
+    json_file <- lapply(r, function(x) {
+      x[sapply(x, is.null)] <- NA
+      unlist(x)
     })
     
+    # create dataframe for output
+    df <- data.frame(do.call('cbind', json_file))
+    
+  
+    #Output data table to UI
+    output$table <- renderTable({
+      df
+    })
+
+    
     # Download data from table as a .csv
+    # file name follows format: 'data-{date of download}.csv'
     output$downloadData <- downloadHandler(
       filename = function(){
-        # file name follows format: 'data-{date of download}.csv'
+
         paste("data-", Sys.Date(), ".csv", sep="")
       },
       content = function(file){
-        write.csv(table, file)
+        write.csv(df, file)
       }
     )
-  
+    
   })
   
-  # Output reactive URL to UI
+  #Output reactive URL to UI
   output$url <- renderText({
-    paste0(baseurl, projecturl(), querystring())
+    paste0(baseurl,projecturl(), '/?', querystring())
   })
   
 }
