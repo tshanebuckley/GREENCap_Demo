@@ -16,4 +16,4 @@ dependencies:
     - mergedeep
     - urwid
     - aiohttp
-    
+    - argparse
