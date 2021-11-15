@@ -8,6 +8,7 @@ library(jsonlite)
 library(DT)
 library(reticulate)
 library(shinyWidgets)
+library(rjson)
 
 
 # Allow for multiple options to be selected per filter
@@ -103,7 +104,9 @@ ui <- fluidPage(theme = shinytheme('cerulean'),
         textInput('new_token', 'Project Token:', ''),
         
         # Execute adding a project
-        actionButton('add_Proj', 'Add Project')
+        actionButton('add_Proj', 'Add Project'),
+        
+        verbatimTextOutput('add_results')
         
       ),
       
@@ -133,9 +136,12 @@ ui <- fluidPage(theme = shinytheme('cerulean'),
 
 
 
-# Setting up server
+################### Setting up server ######################################
 server <- function(input, output) {
-
+  #####################################
+  # Data Fetch
+  
+  
   # Basic url for data fetching
   baseurl <- 'http://127.0.0.1:8000/redcap/'
   
@@ -311,7 +317,96 @@ server <- function(input, output) {
     paste0(baseurl,projecturl(), '/?', querystring())
   })
   
+  ###############################################
+  # Add a Project
+  
+  # function to add a project to either the local system or lab database
+  # Currently only handles local functionality
+  # TODO: fix reactive handling of error cases (redundant project, empty fields
+  # general errors)
+  create_project <- function(name, url, token, local=TRUE){
+    
+    tryCatch({
+      
+      # if local is true
+      if(local){
+        
+        # if fields are empty, return FALSE and let the user know 
+        # (shouldn't be reactive)
+        if(input$new_proj == '' | input$new_URL == '' | input$new_token == ''){
+          output$add_results <- renderText({
+            paste('Please provide all required information.')
+            return(FALSE)
+          })
+          
+        }
+        
+        # access path with projects
+        greencap_user_cfg <- path.expand('~/.greencap/projects')
+        
+        # retrieve all files in 'projects' folder
+        local_files <- list.files(greencap_user_cfg)
+        
+        # add extension to project name for json creation
+        name_ext <- paste0(name, ".json")
+        
+        # if file is already located locally, return FALSE and inform user
+        if (name_ext %in% local_files){
+          
+          output$add_results <- renderText({
+            paste0("Project already contained locally!")
+          })
+          return(FALSE)
+        }
+        
+        # create 2-D vector of url and token
+        redcap_cred_list <- list(url,token)
+        names(redcap_cred_list) <- c("url", "token")
+        
+        # convert vector to json file and write to 'projects' folder
+        json_proj <- toJSON(redcap_cred_list)
+        write(json_proj, paste0('~/.greencap/projects/',name,".json"))
+      }
+    }, error = function(e){
+      
+      # error message if all else fails and return FALSE
+      output$add_results <- renderText({
+        paste0("Error in project creation.")
+      })
+      return(FALSE)
+    })
+    
+    # if added successfully, return TRUE
+    return(TRUE)
+    
+  }
+  
+  
+  # if the user selects "add project"
+  observeEvent(input$add_Proj, {
+    
+    # attempt to create project with inputted fields, returns boolean
+    results <- create_project(input$new_proj, input$new_URL, input$new_token, local = TRUE)
+    
+    # if true, project was added successfully
+    if(results){
+      
+      output$status <- renderText({
+        paste0("Project Added Successfully: ", input$new_proj)
+        
+      })
+    }
+    
+    # If false, project was not added successfully
+    else{
+      output$status <- renderText({
+        paste0("Project could not be added: ", input$new_proj)
+      })
+    }
+      
+  })
+  
 }
 
-
+# Run App
 shinyApp(ui=ui, server=server)
