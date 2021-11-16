@@ -331,15 +331,6 @@ server <- function(input, output) {
       # if local is true
       if(local){
         
-        # if fields are empty, return FALSE and let the user know 
-        # (shouldn't be reactive)
-        if(input$new_proj == '' | input$new_URL == '' | input$new_token == ''){
-          output$add_results <- renderText({
-            paste('Please provide all required information.')
-            return(FALSE)
-          })
-          
-        }
         
         # access path with projects
         greencap_user_cfg <- path.expand('~/.greencap/projects')
@@ -385,23 +376,38 @@ server <- function(input, output) {
   # if the user selects "add project"
   observeEvent(input$add_Proj, {
     
-    # attempt to create project with inputted fields, returns boolean
-    results <- create_project(input$new_proj, input$new_URL, input$new_token, local = TRUE)
-    
-    # if true, project was added successfully
-    if(results){
-      
-      output$status <- renderText({
-        paste0("Project Added Successfully: ", input$new_proj)
-        
+    # if fields are empty, return FALSE and let the user know 
+    # (shouldn't be reactive)
+    if(input$new_proj == '' | input$new_URL == '' | input$new_token == ''){
+      output$add_results <- renderText({
+        paste('Please provide all required information.')
       })
+      
     }
     
-    # If false, project was not added successfully
     else{
-      output$status <- renderText({
-        paste0("Project could not be added: ", input$new_proj)
-      })
+   
+      # attempt to create project with inputted fields, returns boolean
+      results <- create_project(input$new_proj, input$new_URL, input$new_token, local = TRUE)
+      
+      # if true, project was added successfully
+      if(results){
+        
+        output$status <- renderText({
+          paste0("Project Added Successfully: ", input$new_proj)
+          
+        })
+        output$add_results <- renderText({
+          paste('')
+        })
+      }
+      
+      # If false, project was not added successfully
+      else{
+        output$status <- renderText({
+          paste0("Project could not be added: ", input$new_proj)
+        })
+      }
     }
       
   })
