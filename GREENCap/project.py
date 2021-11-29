@@ -85,7 +85,7 @@ class REDCapRequest(): # pydantic.BaseModel
     async def run(self):
         # sub function to apply a sleep
         # TODO: use same logic as below to read streams in the same thread as the request
-        async def fetch(sleep_time, my_coroutine):
+        async def run_fetch(sleep_time, my_coroutine):
             await(asyncio.sleep(sleep_time))
             r = await my_coroutine
             #print(r)
@@ -96,7 +96,7 @@ class REDCapRequest(): # pydantic.BaseModel
         for pload in self.payloads:
             # create a task 
             # NOTE: need a method to convert payloads to resuests so that they can be added to the list of tasks
-            task = asyncio.ensure_future(apply_sleep(self.sleep_time, self.session.request(**pload)))
+            task = asyncio.ensure_future(run_fetch(self.sleep_time, self.session.request(**pload)))
             # append that task to the list of tasks
             tasks.append(task)
         # add a progress bar
