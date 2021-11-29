@@ -452,6 +452,8 @@ def get_project_config(project = None):
 
 # convenience function for creating a project config file
 def create_project_config(name = None, url = None, token = None, identifier = None):
+    # if token == none, use get user
+    # wrap with if statements, where if == none, get 
     pass
 
 # convenience function to see if the item is a field or form

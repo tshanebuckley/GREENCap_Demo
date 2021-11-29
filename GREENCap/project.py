@@ -17,12 +17,36 @@ from asgiref.sync import sync_to_async, async_to_sync
 #from .async_wrapper import for_all_methods_by_prefix
 #from .requests import GCRequest
 from .utils import utils
+import getpass
 
 # method to create a redcap project
 def create_redcap_project(name=None):
     creds = utils.get_project_config(project = name)
     creds["name"] = name
     return REDCapProject(**creds)
+
+
+def user_project(name=None, url=None, token=None, cli=FALSE, local=TRUE):
+    # NOTE: could make this a sub-function for parsing inputs
+    # if the name is None and cli is true, use getuser
+    if name == None:
+        if cli == True:
+            name = getpass.getuser("Name: ")
+        else:
+            raise Exception("Error: Name is None and cli is false")
+    # url uses same logic as name
+    if url == None:
+        if cli == True:
+            url = getpass.getuser("URL: ")
+        else:
+            raise Exception("Error: URL is None and cli is false")
+    if token == None:
+        if cli == True:
+            token = getpass.getpass("Token: ")
+
+    # logic for create, remove, and update functions based on if local or not
+
+
 
 # redcap connection error
 class REDCapConnectError(Exception):
@@ -46,7 +70,7 @@ class REDCapConnectError(Exception):
 # try:
 #     REDCapPayload()
 # except:
-#     REDCapPayloadError() 
+#     REDCapPayloadError()
 
 # function to run a REDCapRequest
 
@@ -94,7 +118,7 @@ class REDCapRequest(): # pydantic.BaseModel
         tasks = list()
         # for each payload given
         for pload in self.payloads:
-            # create a task 
+            # create a task
             # NOTE: need a method to convert payloads to resuests so that they can be added to the list of tasks
             task = asyncio.ensure_future(apply_sleep(self.sleep_time, self.session.request(**pload)))
             # append that task to the list of tasks
@@ -157,10 +181,10 @@ class REDCapProject(pydantic.BaseModel):
     @pydantic.root_validator(pre=True)
     @classmethod
     def check_connection(cls, values):
-        try: 
+        try:
             redcap.Project(values["url"], values["token"])
         except:
-            raise REDCapConnectError(name=values["name"], 
+            raise REDCapConnectError(name=values["name"],
             message="Unable to connect to REDCap project {name}.".format(name=values["name"]))
         return values
 
@@ -171,8 +195,8 @@ class REDCapProject(pydantic.BaseModel):
 # REDCap instance would have a Project w/ access to the above resources
 class Project:
     # use the original __init__ with sycn _call_api
-    def __init__(self, projects=[], verify_ssl=True, lazy=False, 
-                num_chunks=10, extended_by=['records'], 
+    def __init__(self, projects=[], verify_ssl=True, lazy=False,
+                num_chunks=10, extended_by=['records'],
                 use_cfg=True, **kwargs):
         # initialize a url variable
         self.curr_url = ''
@@ -221,7 +245,7 @@ class Project:
     def _call_api(self, payload, typpe, **kwargs): # async
         request_kwargs = self._kwargs
         request_kwargs.update(kwargs)
-        rcr = redcap.RCRequest(self.curr_url, payload, typpe) # self.url, 
+        rcr = redcap.RCRequest(self.curr_url, payload, typpe) # self.url,
         return rcr, request_kwargs
 
     # method to get the list of id records of the defining field of a project
@@ -312,7 +336,7 @@ class Project:
         # create the request
         req = REDCapRequest(_id=_id, payloads=ploads, longitudinal=long, arms=None, events=None, sleep_time=sleep_time)
         # submit the request
-        await req.run() # response = 
+        await req.run() # response =
         # log that the calls have finished
         print("{n} requests have finished.".format(n=str(len(req.content))))
         # drop the payload from the _payloads dict

@@ -1,30 +1,29 @@
 import argparse
-from project import *
+#from project import *
 
-# add_project(dest=[local])
-# update_project()
-# remove_project()
 
 parser = argparse.ArgumentParser(description="GREENCap CLI")
 
-parser.add_argument("-c", "--command",
-                    choices=["add_project", "update_project", "remove_project"],
-                    help="Possible commands:/n add_project/n update_project/n remove_project",
-                    type=str)
 parser.add_argument("-n", "--name",
-                    help="Project Name",
-                    type=str)
-parser.add_argument("-d", "--destination",
-                    help="Destination for project creation",
-                    type=str)
+                    help="name",
+                    metavar="",
+                    required=True)
+parser.add_argument("-u", "--url",
+                    help="url",
+                    metavar="",
+                    required=True)
+parser.add_argument("-l", "--local",
+                    help="local",
+                    metavar="",
+                    required=True)
 
 args = parser.parse_args()
 
-def process_args():
-    if args.command:
-        if args.command == "add_project":
-            pass
-        if args.command == "update_project":
-            pass
-        if args.command == "remove_project":
-            pass
+
+if __name__ == '__main__':
+    name = args.name
+    url = args.url
+    local = args.local
+    print("Adding project with the following credentials...")
+    print("user: %s \nurl: %s \nlocal: %s" % (name, url, local))
+    #user_project(name=name, url=url, local=local)
