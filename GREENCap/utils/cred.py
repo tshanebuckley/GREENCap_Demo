@@ -1,15 +1,27 @@
 import pydantic
 from typing import Optional
 import json
-# todo add validations and error messages
-class Cred(pydantic.BaseModel):
 
+class REDCapCred(pydantic.BaseModel):
+    '''
+    This object is for validating the REDCap credentials for an
+    individual PyCap Project object.
+    '''
+    pass
+
+# todo add validations and error messages
+class GREENCapCred(pydantic.BaseModel):
+    '''
+    This object is for validating the credentials given to a GREENCap
+    class object when adding a new REDCap object to it's list of
+    modified PyCap Project objects. 
+    '''
     name: str
     url: str
     token: str
     local: boolean
     cli: boolean
-    cred: Optional[Cred]
+    cred: Optional[REDCapCred]
 
     if cred:
         name = cred.name
