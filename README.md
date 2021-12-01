@@ -18,7 +18,7 @@ An extensible and more production ready version of the API will also be made usi
 ## To Install
 
 ```bash
-pip install --user git+https://github.com/tshanebuckley/GREENCap.git
+pip install --user git+https://github.com/tshanebuckley/GREENCap_Demo.git
 ```
 
 ## Basic usage
